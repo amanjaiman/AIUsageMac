@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+._*
+
+# Build output
+CursorUsage.app/
+
+# Xcode
+xcuserdata/
+*.xcscmblueprint
+DerivedData/
+build/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+
+# Temporary files
+*.swp
+*~
