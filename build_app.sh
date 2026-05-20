@@ -11,9 +11,16 @@ RESOURCES="$CONTENTS/Resources"
 
 echo "🔨 Compiling..."
 
+SOURCES=(
+    "CursorUsageMenuBar/AppDelegate.swift"
+    "CursorUsageMenuBar/CursorUsageService.swift"
+    "CursorUsageMenuBar/UsagePopoverView.swift"
+    "CursorUsageMenuBar/MenuBarController.swift"
+)
+
 # Build for both Apple Silicon and Intel so the app works on any Mac
-swiftc run.swift -o "${APP_NAME}_arm64" -target arm64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI
-swiftc run.swift -o "${APP_NAME}_x86_64" -target x86_64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI
+swiftc "${SOURCES[@]}" -o "${APP_NAME}_arm64" -target arm64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI -parse-as-library
+swiftc "${SOURCES[@]}" -o "${APP_NAME}_x86_64" -target x86_64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI -parse-as-library
 
 # Create a Universal Binary
 lipo -create -output "$APP_NAME" "${APP_NAME}_arm64" "${APP_NAME}_x86_64"
@@ -64,7 +71,7 @@ python3 - << 'PYEOF'
 import struct, os, io
 
 def create_png(size):
-    """Create a minimal PNG of a donut chart icon."""
+    """Create a minimal PNG of a three-segment usage icon."""
     import zlib
     
     width = height = size
@@ -91,19 +98,25 @@ def create_png(size):
                     alpha = max(0, min(255, int((dist - inner_r) / 1.5 * 255)))
                 
                 import math
-                angle = math.atan2(-dy, dx)
-                angle_deg = math.degrees(angle)
-                if angle_deg < 0:
-                    angle_deg += 360
-                # Convert to "clock" angle starting from top
-                clock_angle = (90 - angle_deg) % 360
-                
-                # 70% fill - green/teal color
-                fill_pct = 0.70
-                if clock_angle / 360.0 < fill_pct:
-                    r, g, b = 76, 205, 153  # Teal/green
-                else:
-                    r, g, b = 128, 128, 128  # Gray
+                angle = math.degrees(math.atan2(-dy, dx))
+                segments = [
+                    (140, 40, (88, 103, 232)),
+                    (20, -80, (52, 168, 109)),
+                    (-100, -200, (229, 115, 55)),
+                ]
+
+                r, g, b = 128, 128, 128
+                for start, end, color in segments:
+                    norm_angle = angle
+                    norm_start = start
+                    norm_end = end
+                    while norm_angle > norm_start:
+                        norm_angle -= 360
+                    while norm_angle < norm_end:
+                        norm_angle += 360
+                    if norm_end <= norm_angle <= norm_start:
+                        r, g, b = color
+                        break
                 
                 pixels.extend([r, g, b, alpha])
             else:

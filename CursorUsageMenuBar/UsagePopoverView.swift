@@ -1,291 +1,274 @@
 import SwiftUI
 
 struct UsagePopoverView: View {
-    @ObservedObject var usageService: CursorUsageService
+    @ObservedObject var usageService: UsageDashboardService
     let onRefresh: () -> Void
-    let onOpenDashboard: () -> Void
+    let onOpenDashboard: (UsageProviderID) -> Void
     let onQuit: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 16) {
-            // Header
-            HStack {
-                Image(systemName: "cpu")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
-                Text("Cursor Usage")
-                    .font(.headline)
-                Spacer()
-                
-                Button(action: onRefresh) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.borderless)
-                .disabled(usageService.isLoading)
-                .opacity(usageService.isLoading ? 0.5 : 1.0)
-            }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: 16)
+
+            header
+
+            Color.clear
+                .frame(height: 12)
+
             Divider()
-            
-            if usageService.isLoading && usageService.currentUsage == nil {
-                LoadingView()
-            } else if usageService.needsLogin {
-                LoginRequiredView(onOpenDashboard: onOpenDashboard)
-            } else if let usage = usageService.currentUsage {
-                UsageDetailView(usage: usage, isRefreshing: usageService.isLoading)
-            } else if let error = usageService.errorMessage {
-                ErrorView(message: error, onRetry: onRefresh)
-            } else {
-                NoDataView(onRefresh: onRefresh)
-            }
-            
-            Divider()
-            
-            // Footer buttons
-            HStack {
-                Button("Open Dashboard") {
-                    onOpenDashboard()
+                .opacity(0.55)
+
+            VStack(spacing: 0) {
+                ForEach(Array(usageService.snapshots.enumerated()), id: \.element.id) { index, snapshot in
+                    MinimalUsageRow(
+                        snapshot: snapshot,
+                        onOpenDashboard: {
+                            onOpenDashboard(snapshot.id)
+                        }
+                    )
+
+                    if index < usageService.snapshots.count - 1 {
+                        Divider()
+                            .opacity(0.5)
+                            .padding(.leading, 16)
+                    }
                 }
-                .buttonStyle(.borderless)
-                .foregroundColor(.accentColor)
-                
-                Spacer()
-                
-                Button("Quit") {
-                    onQuit()
-                }
-                .buttonStyle(.borderless)
-                .foregroundColor(.secondary)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 12)
-        }
-        .frame(width: 300, height: 280)
-    }
-}
 
-struct LoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Loading usage data...")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+            Color.clear
+                .frame(height: 10)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-struct LoginRequiredView: View {
-    let onOpenDashboard: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "person.crop.circle.badge.exclamationmark")
-                .font(.system(size: 40))
-                .foregroundColor(.orange)
-            
-            Text("Login Required")
-                .font(.headline)
-            
-            Text("Please log in to cursor.com in your browser first, then refresh.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button("Open Cursor Dashboard") {
-                onOpenDashboard()
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-struct UsageDetailView: View {
-    let usage: CursorUsage
-    let isRefreshing: Bool
-    
-    var usageColor: Color {
-        if usage.percentageUsed >= 90 {
-            return .red
-        } else if usage.percentageUsed >= 70 {
-            return .orange
-        } else if usage.percentageUsed >= 50 {
-            return .yellow
-        } else {
-            return .green
-        }
-    }
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            // Circular progress
+        .frame(width: 456, height: 286)
+        .background(
             ZStack {
-                // Background circle
-                Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 10)
-                    .frame(width: 80, height: 80)
-                
-                // Progress arc
-                Circle()
-                    .trim(from: 0, to: CGFloat(min(usage.percentageUsed / 100.0, 1.0)))
-                    .stroke(usageColor, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .frame(width: 80, height: 80)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.5), value: usage.percentageUsed)
-                
-                // Percentage text
-                VStack(spacing: 0) {
-                    Text("\(Int(usage.percentageUsed))%")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                    if isRefreshing {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                    }
-                }
+                Color(nsColor: .windowBackgroundColor)
+                LinearGradient(
+                    colors: [
+                        Color.primary.opacity(0.035),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
-            
-            // Usage details
-            VStack(spacing: 8) {
-                HStack {
-                    Text("Premium Requests")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Text("\(usage.premiumRequestsUsed) / \(usage.premiumRequestsLimit)")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-                
-                // Progress bar
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(height: 6)
-                            .cornerRadius(3)
-                        
-                        Rectangle()
-                            .fill(usageColor)
-                            .frame(width: geometry.size.width * CGFloat(min(usage.percentageUsed / 100.0, 1.0)), height: 6)
-                            .cornerRadius(3)
-                            .animation(.easeInOut(duration: 0.5), value: usage.percentageUsed)
-                    }
-                }
-                .frame(height: 6)
-                
-                HStack {
-                    Text("Plan")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Text(usage.planName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-                
-                HStack {
-                    Text("Resets")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Text(usage.usageResetDate)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-                
-                Text("Updated \(timeAgoString(from: usage.lastUpdated))")
-                    .font(.caption2)
+        )
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AI Usage")
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+
+                Text("Cursor, Codex, Claude Code")
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal)
+
+            Spacer()
+
+            Button(action: onRefresh) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .disabled(usageService.isRefreshing)
+            .opacity(usageService.isRefreshing ? 0.42 : 1)
+            .help("Refresh usage")
+
+            Button(action: onQuit) {
+                Image(systemName: "power")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundColor(.secondary)
+            .help("Quit")
         }
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
     }
-    
-    private func timeAgoString(from date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        
-        if seconds < 60 {
-            return "just now"
-        } else if seconds < 3600 {
-            let minutes = seconds / 60
-            return "\(minutes) min\(minutes == 1 ? "" : "s") ago"
+}
+
+private struct MinimalUsageRow: View {
+    let snapshot: ProviderUsageSnapshot
+    let onOpenDashboard: () -> Void
+
+    private var percentage: Double {
+        min(max(snapshot.percentageUsed ?? 0, 0), 100)
+    }
+
+    private var statusColor: Color {
+        switch snapshot.state {
+        case .idle:
+            return .secondary
+        case .ready:
+            if let percentage = snapshot.percentageUsed {
+                if percentage >= 90 { return .red }
+                if percentage >= 70 { return .orange }
+            }
+            return snapshot.id.color
+        case .needsLogin:
+            return .orange
+        case .failed:
+            return .red
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            colorRail
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 7) {
+                    Text(snapshot.id.displayName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+
+                    nameAccessory
+                }
+
+                HStack(spacing: 8) {
+                    MinimalBar(color: snapshot.id.color, percentage: percentage, isActive: snapshot.percentageUsed != nil)
+
+                    Text(snapshot.percentageUsed == nil ? "--" : percentText(percentage))
+                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        .foregroundColor(statusColor)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .frame(width: 34, alignment: .trailing)
+                }
+
+                Text(secondaryLine)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 10)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(snapshot.usedLabel)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                if !snapshot.limitLabel.isEmpty {
+                    Text(limitText)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+            }
+            .frame(width: 108, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 72)
+    }
+
+    private var colorRail: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(snapshot.id.color)
+            .frame(width: 3, height: 44)
+    }
+
+    @ViewBuilder
+    private var nameAccessory: some View {
+        if snapshot.isRefreshing {
+            ProgressView()
+                .scaleEffect(0.48)
+                .frame(width: 16, height: 16)
+        } else if snapshot.id.dashboardURL != nil {
+            Button(action: onOpenDashboard) {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundColor(.secondary)
+            .help("Open dashboard")
+        } else if snapshot.id == .codex {
+            Text("Estimate")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
         } else {
-            let hours = seconds / 3600
-            return "\(hours) hour\(hours == 1 ? "" : "s") ago"
+            EmptyView()
         }
+    }
+
+    private var secondaryLine: String {
+        let pieces = [
+            snapshot.detailLabel,
+            snapshot.resetLabel,
+            snapshot.lastUpdated.map { timeAgoString(from: $0) }
+        ]
+        .compactMap { value -> String? in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }
+
+        return pieces.joined(separator: "  ·  ")
+    }
+
+    private var limitText: String {
+        if snapshot.limitLabel.hasSuffix("soft cap") {
+            return "/ \(snapshot.limitLabel.replacingOccurrences(of: " soft cap", with: ""))"
+        }
+        if snapshot.limitLabel.hasSuffix("limit") {
+            return "/ \(snapshot.limitLabel.replacingOccurrences(of: " limit", with: ""))"
+        }
+        return "/ \(snapshot.limitLabel)"
+    }
+
+    private func timeAgoString(from date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+
+        if seconds < 60 {
+            return "now"
+        }
+        if seconds < 3600 {
+            let minutes = seconds / 60
+            return "\(minutes)m ago"
+        }
+
+        let hours = seconds / 3600
+        return "\(hours)h ago"
     }
 }
 
-struct ErrorView: View {
-    let message: String
-    let onRetry: () -> Void
-    
+private struct MinimalBar: View {
+    let color: Color
+    let percentage: Double
+    let isActive: Bool
+
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
-                .foregroundColor(.red)
-            
-            Text("Error")
-                .font(.headline)
-            
-            Text(message)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button("Retry") {
-                onRetry()
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.08))
+
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(5, geometry.size.width * CGFloat(percentage / 100)))
+                    .opacity(isActive ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.25), value: percentage)
             }
-            .buttonStyle(.bordered)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(height: 4)
     }
 }
 
-struct NoDataView: View {
-    let onRefresh: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "questionmark.circle")
-                .font(.system(size: 40))
-                .foregroundColor(.secondary)
-            
-            Text("No Data")
-                .font(.headline)
-            
-            Text("Click refresh to load your Cursor usage.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            
-            Button("Refresh") {
-                onRefresh()
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-#Preview {
-    UsagePopoverView(
-        usageService: {
-            let service = CursorUsageService()
-            return service
-        }(),
-        onRefresh: {},
-        onOpenDashboard: {},
-        onQuit: {}
-    )
+private func percentText(_ percentage: Double) -> String {
+    "\(Int(percentage.rounded()))%"
 }
