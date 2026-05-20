@@ -3,7 +3,7 @@
 ._*
 
 # Build output
-CursorUsage.app/
+*.app/
 
 # Xcode
 xcuserdata/

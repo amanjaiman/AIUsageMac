@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Build CursorUsage.app
+# Build AI Usage Mac.app
 set -e
 
-APP_NAME="CursorUsage"
-APP_DIR="$APP_NAME.app"
+APP_DISPLAY_NAME="AI Usage Mac"
+APP_EXECUTABLE="AIUsageMac"
+APP_DIR="$APP_DISPLAY_NAME.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
@@ -19,19 +20,19 @@ SOURCES=(
 )
 
 # Build for both Apple Silicon and Intel so the app works on any Mac
-swiftc "${SOURCES[@]}" -o "${APP_NAME}_arm64" -target arm64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI -parse-as-library
-swiftc "${SOURCES[@]}" -o "${APP_NAME}_x86_64" -target x86_64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI -parse-as-library
+swiftc "${SOURCES[@]}" -o "${APP_EXECUTABLE}_arm64" -target arm64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI -parse-as-library
+swiftc "${SOURCES[@]}" -o "${APP_EXECUTABLE}_x86_64" -target x86_64-apple-macosx13.0 -framework Cocoa -framework WebKit -framework SwiftUI -parse-as-library
 
 # Create a Universal Binary
-lipo -create -output "$APP_NAME" "${APP_NAME}_arm64" "${APP_NAME}_x86_64"
-rm "${APP_NAME}_arm64" "${APP_NAME}_x86_64"
+lipo -create -output "$APP_EXECUTABLE" "${APP_EXECUTABLE}_arm64" "${APP_EXECUTABLE}_x86_64"
+rm "${APP_EXECUTABLE}_arm64" "${APP_EXECUTABLE}_x86_64"
 
 echo "📦 Creating app bundle..."
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS"
 mkdir -p "$RESOURCES"
 
-mv "$APP_NAME" "$MACOS/$APP_NAME"
+mv "$APP_EXECUTABLE" "$MACOS/$APP_EXECUTABLE"
 
 # Create Info.plist
 cat > "$CONTENTS/Info.plist" << 'EOF'
@@ -40,11 +41,11 @@ cat > "$CONTENTS/Info.plist" << 'EOF'
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>CursorUsage</string>
+    <string>AI Usage Mac</string>
     <key>CFBundleDisplayName</key>
-    <string>Cursor Usage</string>
+    <string>AI Usage Mac</string>
     <key>CFBundleIdentifier</key>
-    <string>com.local.CursorUsage</string>
+    <string>com.amanjaiman.AIUsageMac</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -52,7 +53,7 @@ cat > "$CONTENTS/Info.plist" << 'EOF'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>CursorUsage</string>
+    <string>AIUsageMac</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
@@ -166,7 +167,7 @@ def create_icns(filename):
     with open(filename, 'wb') as f:
         f.write(icon_data)
 
-create_icns('CursorUsage.app/Contents/Resources/AppIcon.icns')
+create_icns('AI Usage Mac.app/Contents/Resources/AppIcon.icns')
 print("✅ App icon created")
 PYEOF
 
@@ -183,7 +184,7 @@ echo ""
 echo "To install, run:"
 echo "  cp -r $APP_DIR /Applications/"
 echo ""
-echo "Then you can search for 'Cursor Usage' in Spotlight (Cmd+Space)"
+echo "Then you can search for 'AI Usage Mac' in Spotlight (Cmd+Space)"
 echo ""
 echo "Note: If a recipient gets a Gatekeeper warning, they can right-click"
 echo "the app and choose 'Open' to bypass it, or run:"
