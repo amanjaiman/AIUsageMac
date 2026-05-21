@@ -5,13 +5,16 @@ struct UsagePopoverView: View {
     let onRefresh: () -> Void
     let onOpenDashboard: (UsageProviderID) -> Void
     let onQuit: () -> Void
+    @State private var isShowingSettings = false
 
     var body: some View {
+        let showingSettings = isShowingSettings || usageService.shouldShowProviderSetup
+
         VStack(spacing: 0) {
             Color.clear
                 .frame(height: 16)
 
-            header
+            header(isShowingSettings: showingSettings)
 
             Color.clear
                 .frame(height: 12)
@@ -19,19 +22,23 @@ struct UsagePopoverView: View {
             Divider()
                 .opacity(0.55)
 
-            VStack(spacing: 0) {
-                ForEach(Array(usageService.snapshots.enumerated()), id: \.element.id) { index, snapshot in
-                    MinimalUsageRow(
-                        snapshot: snapshot,
-                        onOpenDashboard: {
-                            onOpenDashboard(snapshot.id)
-                        }
-                    )
+            if showingSettings {
+                settingsContent
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(usageService.visibleSnapshots.enumerated()), id: \.element.id) { index, snapshot in
+                        MinimalUsageRow(
+                            snapshot: snapshot,
+                            onOpenDashboard: {
+                                onOpenDashboard(snapshot.id)
+                            }
+                        )
 
-                    if index < usageService.snapshots.count - 1 {
-                        Divider()
-                            .opacity(0.5)
-                            .padding(.leading, 16)
+                        if index < usageService.visibleSnapshots.count - 1 {
+                            Divider()
+                                .opacity(0.5)
+                                .padding(.leading, 16)
+                        }
                     }
                 }
             }
@@ -55,20 +62,39 @@ struct UsagePopoverView: View {
         )
     }
 
-    private var header: some View {
+    private func header(isShowingSettings: Bool) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI Usage")
+                Text(isShowingSettings ? "Settings" : "AI Usage")
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
 
-                Text("Cursor, Codex, Claude Code")
+                Text(isShowingSettings ? "Choose what appears in the menu" : enabledProviderSummary)
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
 
             Spacer()
+
+            Button {
+                if isShowingSettings {
+                    usageService.completeProviderSetup()
+                    self.isShowingSettings = false
+                    onRefresh()
+                } else {
+                    self.isShowingSettings = true
+                }
+            } label: {
+                Image(systemName: isShowingSettings ? "checkmark" : "gearshape")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .disabled(isShowingSettings && usageService.enabledProviders.isEmpty)
+            .opacity(isShowingSettings && usageService.enabledProviders.isEmpty ? 0.35 : 1)
+            .help(isShowingSettings ? "Done" : "Settings")
 
             Button(action: onRefresh) {
                 Image(systemName: "arrow.clockwise")
@@ -77,8 +103,8 @@ struct UsagePopoverView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .disabled(usageService.isRefreshing)
-            .opacity(usageService.isRefreshing ? 0.42 : 1)
+            .disabled(usageService.isRefreshing || isShowingSettings)
+            .opacity(usageService.isRefreshing || isShowingSettings ? 0.42 : 1)
             .help("Refresh usage")
 
             Button(action: onQuit) {
@@ -92,6 +118,89 @@ struct UsagePopoverView: View {
             .help("Quit")
         }
         .padding(.horizontal, 16)
+    }
+
+    private var settingsContent: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(UsageProviderID.allCases.enumerated()), id: \.element.id) { index, provider in
+                ProviderToggleRow(
+                    provider: provider,
+                    isEnabled: Binding(
+                        get: {
+                            usageService.isProviderEnabled(provider)
+                        },
+                        set: { isEnabled in
+                            usageService.setProvider(provider, enabled: isEnabled)
+                        }
+                    )
+                )
+
+                if index < UsageProviderID.allCases.count - 1 {
+                    Divider()
+                        .opacity(0.5)
+                        .padding(.leading, 16)
+                }
+            }
+
+            if usageService.enabledProviders.isEmpty {
+                Text("Enable at least one app to show usage.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .padding(.top, 10)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var enabledProviderSummary: String {
+        let providers = UsageProviderID.allCases
+            .filter { usageService.enabledProviders.contains($0) }
+            .map(\.displayName)
+        return providers.isEmpty ? "No apps enabled" : providers.joined(separator: ", ")
+    }
+}
+
+private struct ProviderToggleRow: View {
+    let provider: UsageProviderID
+    @Binding var isEnabled: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(provider.color)
+                .frame(width: 3, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(provider.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(detail)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $isEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 58)
+    }
+
+    private var detail: String {
+        switch provider {
+        case .cursor:
+            return "Read from Cursor dashboard"
+        case .codex:
+            return "Estimated from local Codex usage"
+        case .claude:
+            return "Read from Claude usage page"
+        }
     }
 }
 

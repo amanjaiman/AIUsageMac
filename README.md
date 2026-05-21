@@ -6,6 +6,7 @@ A macOS menu bar app for tracking AI coding-assistant usage across Cursor, Codex
 
 - Menu bar pie icon with one segment for each provider.
 - Compact popover with spend, limit, percent used, reset date, and refresh time.
+- Settings screen for choosing which providers appear.
 - Cursor usage from the Cursor dashboard/API session.
 - Claude Code spend from the Claude usage page.
 - Codex weekly spend estimated from local Codex session token usage.

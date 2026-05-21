@@ -105,67 +105,119 @@ struct ProviderUsageSnapshot: Identifiable, Equatable {
 final class UsageDashboardService: NSObject, ObservableObject {
     @Published private(set) var snapshots: [ProviderUsageSnapshot]
     @Published private(set) var isRefreshing = false
+    @Published private(set) var enabledProviders: Set<UsageProviderID>
+    @Published private(set) var hasCompletedProviderSetup: Bool
 
     private let cursorFetcher = CursorUsageFetcher()
     private let claudeFetcher = ClaudeUsageFetcher()
     private let localUsageFetcher = LocalUsageFetcher()
+    private let defaults = UserDefaults.standard
+    private let enabledProvidersKey = "AIUsageMac.enabledProviders"
+    private let providerSetupCompletedKey = "AIUsageMac.providerSetupCompleted"
 
     override init() {
         snapshots = UsageProviderID.allCases.map { ProviderUsageSnapshot.placeholder(for: $0) }
+        if let storedProviderIDs = UserDefaults.standard.array(forKey: "AIUsageMac.enabledProviders") as? [String] {
+            enabledProviders = Set(storedProviderIDs.compactMap(UsageProviderID.init(rawValue:)))
+        } else {
+            enabledProviders = Self.defaultEnabledProviders()
+        }
+        hasCompletedProviderSetup = UserDefaults.standard.bool(forKey: "AIUsageMac.providerSetupCompleted")
         super.init()
+    }
+
+    var visibleSnapshots: [ProviderUsageSnapshot] {
+        UsageProviderID.allCases
+            .filter { enabledProviders.contains($0) }
+            .compactMap { provider in snapshots.first { $0.id == provider } }
+    }
+
+    var shouldShowProviderSetup: Bool {
+        !hasCompletedProviderSetup || enabledProviders.isEmpty
     }
 
     func snapshot(for provider: UsageProviderID) -> ProviderUsageSnapshot? {
         snapshots.first { $0.id == provider }
     }
 
+    func isProviderEnabled(_ provider: UsageProviderID) -> Bool {
+        enabledProviders.contains(provider)
+    }
+
+    func setProvider(_ provider: UsageProviderID, enabled: Bool) {
+        if enabled {
+            enabledProviders.insert(provider)
+        } else {
+            enabledProviders.remove(provider)
+        }
+        persistProviderPreferences()
+    }
+
+    func completeProviderSetup() {
+        hasCompletedProviderSetup = true
+        defaults.set(true, forKey: providerSetupCompletedKey)
+    }
+
     func refreshAll(completion: @escaping () -> Void) {
         guard !isRefreshing else { return }
 
-        AppLog.write("Starting refresh for all providers")
+        let providersToRefresh = UsageProviderID.allCases.filter { enabledProviders.contains($0) }
+        guard !providersToRefresh.isEmpty else {
+            AppLog.write("Skipped refresh: no enabled providers")
+            completion()
+            return
+        }
+
+        AppLog.write("Starting refresh for enabled providers: \(providersToRefresh.map(\.displayName).joined(separator: ", "))")
         isRefreshing = true
         snapshots = snapshots.map { snapshot in
             var updated = snapshot
-            updated.isRefreshing = true
+            updated.isRefreshing = providersToRefresh.contains(snapshot.id)
             return updated
         }
 
         let group = DispatchGroup()
 
-        group.enter()
-        cursorFetcher.fetchUsage { [weak self] snapshot in
-            self?.updateSnapshot(snapshot)
-            group.leave()
-        }
-
-        group.enter()
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let snapshot = self?.localUsageFetcher.fetchCodexUsage()
-                ?? ProviderUsageSnapshot.placeholder(for: .codex)
-            DispatchQueue.main.async {
+        if providersToRefresh.contains(.cursor) {
+            group.enter()
+            cursorFetcher.fetchUsage { [weak self] snapshot in
                 self?.updateSnapshot(snapshot)
                 group.leave()
             }
         }
 
-        group.enter()
-        claudeFetcher.fetchUsage { [weak self] snapshot in
-            if let snapshot {
-                self?.updateSnapshot(snapshot)
-            } else {
-                self?.updateSnapshot(ProviderUsageSnapshot(
-                    id: .claude,
-                    usedLabel: "Unavailable",
-                    limitLabel: "",
-                    detailLabel: "Could not read Claude usage page",
-                    resetLabel: "",
-                    percentageUsed: nil,
-                    lastUpdated: Date(),
-                    state: .failed("Could not read Claude usage page"),
-                    isRefreshing: false
-                ))
+        if providersToRefresh.contains(.codex) {
+            group.enter()
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let snapshot = self?.localUsageFetcher.fetchCodexUsage()
+                    ?? ProviderUsageSnapshot.placeholder(for: .codex)
+                DispatchQueue.main.async {
+                    self?.updateSnapshot(snapshot)
+                    group.leave()
+                }
             }
-            group.leave()
+        }
+
+        if providersToRefresh.contains(.claude) {
+            group.enter()
+            claudeFetcher.fetchUsage { [weak self] snapshot in
+                if let snapshot {
+                    self?.updateSnapshot(snapshot)
+                } else {
+                    self?.updateSnapshot(ProviderUsageSnapshot(
+                        id: .claude,
+                        usedLabel: "Unavailable",
+                        limitLabel: "",
+                        detailLabel: "Could not read Claude usage page",
+                        resetLabel: "",
+                        percentageUsed: nil,
+                        lastUpdated: Date(),
+                        state: .failed("Could not read Claude usage page"),
+                        isRefreshing: false
+                    ))
+                }
+                group.leave()
+            }
         }
 
         group.notify(queue: .main) { [weak self] in
@@ -175,7 +227,7 @@ final class UsageDashboardService: NSObject, ObservableObject {
                 updated.isRefreshing = false
                 return updated
             } ?? []
-            let summary = self?.snapshots
+            let summary = self?.visibleSnapshots
                 .map { "\($0.id.displayName)=\($0.usedLabel) \($0.limitLabel)" }
                 .joined(separator: "; ") ?? "no snapshots"
             AppLog.write("Completed refresh: \(summary)")
@@ -189,6 +241,21 @@ final class UsageDashboardService: NSObject, ObservableObject {
             return
         }
         snapshots[index] = snapshot
+    }
+
+    private func persistProviderPreferences() {
+        let providerIDs = UsageProviderID.allCases
+            .filter { enabledProviders.contains($0) }
+            .map(\.rawValue)
+        defaults.set(providerIDs, forKey: enabledProvidersKey)
+    }
+
+    private static func defaultEnabledProviders() -> Set<UsageProviderID> {
+        var providers: Set<UsageProviderID> = [.cursor, .claude]
+        if FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.codex/state_5.sqlite") {
+            providers.insert(.codex)
+        }
+        return providers
     }
 }
 

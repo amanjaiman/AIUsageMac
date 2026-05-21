@@ -31,7 +31,7 @@ class MenuBarController: NSObject {
             button.imagePosition = .imageLeading
             button.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
             AppLog.write("Status item button created with fixed length \(statusItem.length)")
-            updateMenuBarIcon(snapshots: usageService.snapshots)
+            updateMenuBarIcon(snapshots: usageService.visibleSnapshots)
         } else {
             AppLog.write("Status item button was nil")
         }
@@ -66,7 +66,7 @@ class MenuBarController: NSObject {
     private func refreshUsage() {
         usageService.refreshAll { [weak self] in
             guard let self else { return }
-            self.updateMenuBarIcon(snapshots: self.usageService.snapshots)
+            self.updateMenuBarIcon(snapshots: self.usageService.visibleSnapshots)
         }
     }
 
@@ -90,11 +90,28 @@ class MenuBarController: NSObject {
         let radius: CGFloat = 8.6
         let lineWidth: CGFloat = 3.2
 
-        let segments: [(provider: UsageProviderID, startAngle: CGFloat, length: CGFloat)] = [
-            (.cursor, 140, 100),
-            (.codex, 20, 100),
-            (.claude, -100, 100)
-        ]
+        let providers = UsageProviderID.allCases.filter { provider in
+            snapshots.contains { $0.id == provider }
+        }
+        guard !providers.isEmpty else {
+            let track = NSBezierPath()
+            track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+            track.lineWidth = lineWidth
+            track.lineCapStyle = .round
+            NSColor.systemGray.withAlphaComponent(0.24).setStroke()
+            track.stroke()
+            return
+        }
+
+        let gap: CGFloat = providers.count == 1 ? 0 : 14
+        let segmentLength = (360 - (gap * CGFloat(providers.count))) / CGFloat(providers.count)
+        let segments = providers.enumerated().map { index, provider in
+            (
+                provider: provider,
+                startAngle: CGFloat(90) - (CGFloat(index) * (segmentLength + gap)),
+                length: segmentLength
+            )
+        }
 
         for segment in segments {
             let track = NSBezierPath()
