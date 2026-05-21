@@ -120,7 +120,7 @@ final class UsageDashboardService: NSObject, ObservableObject {
         if let storedProviderIDs = UserDefaults.standard.array(forKey: "AIUsageMac.enabledProviders") as? [String] {
             enabledProviders = Set(storedProviderIDs.compactMap(UsageProviderID.init(rawValue:)))
         } else {
-            enabledProviders = Self.defaultEnabledProviders()
+            enabledProviders = Self.initialEnabledProviders()
         }
         hasCompletedProviderSetup = UserDefaults.standard.bool(forKey: "AIUsageMac.providerSetupCompleted")
         super.init()
@@ -250,12 +250,8 @@ final class UsageDashboardService: NSObject, ObservableObject {
         defaults.set(providerIDs, forKey: enabledProvidersKey)
     }
 
-    private static func defaultEnabledProviders() -> Set<UsageProviderID> {
-        var providers: Set<UsageProviderID> = [.cursor, .claude]
-        if FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.codex/state_5.sqlite") {
-            providers.insert(.codex)
-        }
-        return providers
+    private static func initialEnabledProviders() -> Set<UsageProviderID> {
+        []
     }
 }
 
