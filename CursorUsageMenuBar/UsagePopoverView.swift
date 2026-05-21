@@ -43,10 +43,12 @@ struct UsagePopoverView: View {
                 }
             }
 
+            Spacer(minLength: 0)
+
             Color.clear
                 .frame(height: 10)
         }
-        .frame(width: 456, height: 286)
+        .frame(width: 456, height: 286, alignment: .top)
         .background(
             ZStack {
                 Color(nsColor: .windowBackgroundColor)
